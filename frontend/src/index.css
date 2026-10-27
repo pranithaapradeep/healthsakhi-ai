@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+/*
+ * HealthSakhi design tokens.
+ * Palette: deep forest green (actions, navigation), warm ivory (page), charcoal (text),
+ * muted sage (secondary surfaces) and a restrained terracotta accent (warmth, highlights).
+ * The older colour names used across the app (teal, emerald, slate) are mapped onto this palette,
+ * so every page shares one consistent look; new code should prefer forest / sage / terracotta / ink.
+ */
+@theme {
+  --font-sans: "Noto Sans", "Noto Sans Tamil", "Noto Sans Devanagari", ui-sans-serif, system-ui, sans-serif;
+  /* Editorial serif for headings in English; Tamil and Hindi headings use Noto Sans (see below). */
+  --font-display: Georgia, "Noto Serif", "Iowan Old Style", "Times New Roman", "Noto Sans Tamil", "Noto Sans Devanagari", serif;
+
+  --color-ivory: #faf7f1;
+  --color-line: #e7e1d6;
+  --color-ink: #1e2421;
+
+  --color-forest-50: #eff5f1;
+  --color-forest-100: #dce9e1;
+  --color-forest-200: #b9d3c4;
+  --color-forest-300: #8fb7a1;
+  --color-forest-400: #5f957b;
+  --color-forest-500: #3f7a60;
+  --color-forest-600: #2c6650;
+  --color-forest-700: #1f5442;
+  --color-forest-800: #184436;
+  --color-forest-900: #12352a;
+  --color-forest-950: #0b241c;
+
+  --color-sage-50: #f4f6f1;
+  --color-sage-100: #e9eee4;
+  --color-sage-200: #d7e0cf;
+  --color-sage-300: #bccbb0;
+  --color-sage-400: #9bb08c;
+
+  --color-terracotta-50: #fbf2ee;
+  --color-terracotta-100: #f5e1d8;
+  --color-terracotta-200: #ebc3b2;
+  --color-terracotta-500: #c4673f;
+  --color-terracotta-600: #a9532f;
+  --color-terracotta-700: #8a4227;
+
+  /* Legacy names → forest */
+  --color-teal-50: #eff5f1;
+  --color-teal-100: #dce9e1;
+  --color-teal-200: #b9d3c4;
+  --color-teal-300: #8fb7a1;
+  --color-teal-400: #5f957b;
+  --color-teal-500: #3f7a60;
+  --color-teal-600: #2c6650;
+  --color-teal-700: #1f5442;
+  --color-teal-800: #184436;
+  --color-teal-900: #12352a;
+  --color-emerald-50: #eff5f1;
+  --color-emerald-100: #dce9e1;
+  --color-emerald-200: #b9d3c4;
+  --color-emerald-300: #8fb7a1;
+  --color-emerald-400: #5f957b;
+  --color-emerald-500: #3f7a60;
+  --color-emerald-600: #2c6650;
+  --color-emerald-700: #1f5442;
+  --color-emerald-800: #184436;
+  --color-emerald-900: #12352a;
+
+  /* Legacy names → warm charcoal greys */
+  --color-slate-50: #f7f5ef;
+  --color-slate-100: #efede6;
+  --color-slate-200: #e4e0d6;
+  --color-slate-300: #cbc8bf;
+  --color-slate-400: #9ca19c;
+  --color-slate-500: #737a75;
+  --color-slate-600: #5a625d;
+  --color-slate-700: #424a45;
+  --color-slate-800: #2b322e;
+  --color-slate-900: #1e2421;
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-ivory text-slate-800 antialiased;
+    font-family: var(--font-sans);
+    line-height: 1.6;
+  }
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  /* Tamil and Devanagari: use Noto Sans for headings too, and give vowel signs room. */
+  html[lang="ta"] :is(h1, h2, h3, .font-display),
+  html[lang="hi"] :is(h1, h2, h3, .font-display) { font-family: var(--font-sans); letter-spacing: 0; }
+  html[lang="ta"] body, html[lang="hi"] body { line-height: 1.75; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-forest-700; }
+  ::selection { @apply bg-forest-100 text-forest-950; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

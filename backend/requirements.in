@@ -1,0 +1,14 @@
+# Top-level runtime dependencies. Compile to a fully pinned requirements.txt with:
+#   pip-compile --strip-extras requirements.in
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+email-validator>=2.1
+sqlalchemy>=2.0.30,<3
+alembic>=1.13
+psycopg[binary]>=3.2
+argon2-cffi>=23.1
+anthropic>=0.60
+groq>=1.0
+httpx>=0.27

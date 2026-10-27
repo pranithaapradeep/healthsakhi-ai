@@ -1,0 +1,6 @@
+# Development / test dependencies, constrained to the pinned runtime set.
+#   pip-compile --strip-extras requirements-dev.in
+-c requirements.txt
+pytest>=8
+# Starlette's TestClient: httpx2 replaces the deprecated httpx backend.
+httpx2>=2.0

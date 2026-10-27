@@ -1,0 +1,42 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+dist/
+*.log
+.vite/
+coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Offline OpenStreetMap hospital copy (rebuild with scripts/build_hospital_snapshot.py)
+backend/data/*.json.gz
+backend/data/*.partial.json
+backend/data/*.tmp
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Candidate photos downloaded for visual review (scripts/fetch_tip_images.py --review)
+tip-image-review/
+
+# Local diagnostic logs
+*.log
+
+# Generated TypeScript build metadata
+*.tsbuildinfo
