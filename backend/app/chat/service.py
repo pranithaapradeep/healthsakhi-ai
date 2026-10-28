@@ -20,10 +20,13 @@ from ..core.logging import logger
 from ..db.base import as_utc, utcnow
 from ..db.models import Conversation, Message, User
 from ..safety.matcher import SafetyResult, check_text
+from ..safety.medication import MEDICINE_NOTE, asks_about_dose_change, redact_doses
 from ..safety.messages import emergency_text
 from .schemas import ChatRequest
 
 TITLE_CHARS = 60
+# Emergency phrases can be split over messages ("I have pain" … "in my chest"): check the latest few together.
+RECENT_USER_MESSAGES = 3
 
 
 class ConversationNotFound(Exception):
@@ -90,8 +93,34 @@ def _context(db: Session, conversation: Conversation | None, limit: int) -> list
     return turns
 
 
-def _generate(provider: AIProvider, request: ChatRequest, turns: list[ChatTurn], safety: SafetyResult) -> AIResult:
-    system = build_system_prompt(request.language, safety.categories if safety.is_emergency else None)
+@dataclass(frozen=True)
+class SafetyContext:
+    safety: SafetyResult  # what this reply acts on (fixed 112 guidance when it is an emergency)
+    earlier: SafetyResult  # emergency signs from earlier messages, already answered with fixed guidance
+    medication: bool  # the person asks about changing a medicine dose
+
+
+def assess_safety(message: str, earlier_user_messages: list[str]) -> SafetyContext:
+    """Deterministic checks for one chat turn. No AI involved; keyword rules cannot catch every emergency."""
+    recent = earlier_user_messages[-(RECENT_USER_MESSAGES - 1) :] if RECENT_USER_MESSAGES > 1 else []
+    current = check_text(message)
+    earlier = check_text(*recent)
+    safety = current
+    if not current.is_emergency and not earlier.is_emergency:
+        combined = check_text(*recent, message)
+        if combined.is_emergency:
+            safety = combined  # only visible when the recent messages are read together
+    return SafetyContext(safety=safety, earlier=earlier, medication=asks_about_dose_change(message))
+
+
+def _generate(provider: AIProvider, request: ChatRequest, turns: list[ChatTurn], ctx: SafetyContext) -> AIResult:
+    safety = ctx.safety
+    system = build_system_prompt(
+        request.language,
+        safety.categories if safety.is_emergency else None,
+        earlier_emergency_categories=ctx.earlier.categories if ctx.earlier.is_emergency else None,
+        medication_question=ctx.medication,
+    )
     result = provider.generate(system, turns)
     if not matches_language(result.text, request.language):
         # One corrective retry if the reply came back in the wrong script.
@@ -114,12 +143,15 @@ def handle_chat(
     turns = [*_context(db, conversation, limit), ChatTurn("user", request.message)]
 
     # Deterministic safety rules run first and do not depend on the AI.
-    safety = check_text(request.message)
+    ctx = assess_safety(request.message, [t.text for t in turns[:-1] if t.role == "user"])
+    safety = ctx.safety
 
     started = time.monotonic()
+    doses_removed = 0
     try:
-        result = _generate(provider, request, turns, safety)
-        reply_text = result.text
+        result = _generate(provider, request, turns, ctx)
+        # The AI is told never to give doses; enforce it (amounts the person wrote themselves are kept).
+        reply_text, doses_removed = redact_doses(result.text, request.message, request.language)
     except AIProviderError as exc:
         if not safety.is_emergency:
             raise  # nothing has been written yet; the client can retry
@@ -127,6 +159,10 @@ def handle_chat(
         logger.warning("chat_ai_error_during_emergency kind=%s", exc.kind)
         result, reply_text = AIResult(text="", model="safety-rules"), ""
     elapsed_ms = int((time.monotonic() - started) * 1000)
+    if ctx.medication or doses_removed:
+        # Fixed wording, so the medicine warning never depends on the AI remembering it.
+        note = MEDICINE_NOTE[request.language]
+        reply_text = f"{reply_text}\n\n{note}".strip() if reply_text else note
     if safety.is_emergency:
         # Fixed emergency wording always comes first, ahead of any AI text.
         fixed = emergency_text(request.language, safety.categories)
@@ -156,7 +192,7 @@ def handle_chat(
 
     # Metadata only — never message text.
     logger.info(
-        "chat_reply conversation_id=%s language=%s model=%s latency_ms=%s in_tokens=%s out_tokens=%s chars_in=%s chars_out=%s safety=%s rules=%s",
+        "chat_reply conversation_id=%s language=%s model=%s latency_ms=%s in_tokens=%s out_tokens=%s chars_in=%s chars_out=%s safety=%s rules=%s earlier_emergency=%s medication=%s doses_removed=%s",
         conversation.id,
         request.language,
         result.model,
@@ -167,5 +203,8 @@ def handle_chat(
         len(reply_text),
         safety.level,
         ",".join(safety.rule_ids) or "-",
+        ctx.earlier.is_emergency,
+        ctx.medication,
+        doses_removed,
     )
     return conversation, user_msg, reply, safety

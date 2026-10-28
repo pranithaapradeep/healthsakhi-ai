@@ -21,18 +21,13 @@ from ..ai.provider import AIProvider, AIProviderError, ChatTurn
 from ..core.logging import logger
 from ..safety.matcher import SafetyResult, merge, normalize
 from ..safety.matcher import check_text
+from ..safety.medication import DOSE_RE  # shared with chat
 from ..safety.schemas import SafetyOut
 from .prompts import CORRECTION, LANGUAGE_NAMES, build_assessment_prompt, format_intake
 from .schemas import AIAssessmentOutput, AssessmentRequest, AssessmentResponse, AssessmentResult
 
 _RANK = {"routine": 0, "urgent": 1, "emergency": 2}
 
-# Digits followed by a dose unit or tablet count, in English, Hindi and Tamil.
-DOSE_RE = re.compile(
-    # The trailing lookahead stops "2 tablespoons", "3 tabs open" or "10 mgs"-style partial words matching.
-    r"\d+(?:[.,]\d+)?\s*(?:mg|mcg|µg|ml|iu|tablets?|tabs?|capsules?|गोली|गोलियां|गोलियाँ|टैबलेट|மாத்திரை|மில்லி)(?![a-z])",
-    re.IGNORECASE,
-)
 _PREGNANCY_CONCERN = re.compile(r"bleed|blood|pain|cramp|खून|दर्द|ब्लीडिंग|இரத்த|ரத்த|வலி")
 
 

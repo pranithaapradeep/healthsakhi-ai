@@ -75,10 +75,38 @@ that clearly in one short sentence, then give only brief, safe information. Do n
 improves."""
 
 
-def build_system_prompt(language: Language, emergency_categories: tuple[str, ...] | list[str] | None = None) -> str:
+_EARLIER_NOTE = """
+
+EARLIER SAFETY CHECK
+Fixed safety rules flagged possible emergency signs earlier in this conversation ({categories}). If those signs may \
+still be happening, or the person has not yet got help, remind them in one short sentence to call 112 or go to the \
+nearest emergency department now. Do not suggest waiting to see if it improves."""
+
+_MEDICATION_NOTE = """
+
+MEDICINE QUESTION
+The person is asking about starting, stopping, doubling or increasing a medicine dose. Do not give any dose, amount, \
+number of tablets or timing. Explain that dose changes must come from the doctor who prescribed the medicine or a \
+pharmacist. If they may already have taken too much, tell them to call 112 now. The app adds a fixed note about this."""
+
+
+def _names(categories: tuple[str, ...] | list[str]) -> str:
+    return ", ".join(c.replace("_", " ") for c in categories)
+
+
+def build_system_prompt(
+    language: Language,
+    emergency_categories: tuple[str, ...] | list[str] | None = None,
+    earlier_emergency_categories: tuple[str, ...] | list[str] | None = None,
+    medication_question: bool = False,
+) -> str:
     prompt = _BASE.format(language_rules=_LANGUAGE_RULES[language])
     if emergency_categories:
-        prompt += _SAFETY_NOTE.format(categories=", ".join(c.replace("_", " ") for c in emergency_categories))
+        prompt += _SAFETY_NOTE.format(categories=_names(emergency_categories))
+    elif earlier_emergency_categories:
+        prompt += _EARLIER_NOTE.format(categories=_names(earlier_emergency_categories))
+    if medication_question:
+        prompt += _MEDICATION_NOTE
     return prompt
 
 
