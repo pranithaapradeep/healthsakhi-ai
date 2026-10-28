@@ -242,7 +242,10 @@ Set-Location C:\dev\healthsakhi-ai\backend
 ```
 
 Then set `HOSPITAL_PROVIDER=snapshot` in `backend\.env` and restart. Typed places are still resolved by Nominatim, and
-suggestions still use Photon. The copy (`backend/data/hospitals-india.json.gz`) is not committed to Git.
+suggestions still use Photon. The finished copy (`backend/data/hospitals-india.json.gz`, about 3 MB) is committed so
+the deployed server has it; partial/temporary build files stay out of Git. It is OpenStreetMap data under the ODbL:
+keep the "© OpenStreetMap contributors" attribution the app shows with every answer. Rebuild and commit it again to
+refresh it (each answer shows its "data as of" date).
 
 Alternatives reviewed (Oct 2026): Geoapify Places (OSM-based; free 3,000 credits/day, key, attribution), LocationIQ
 (free 5,000/day; the nearby-places API is not listed in the free plan), Google Places (paid per request, ~5,000 free
@@ -386,6 +389,33 @@ Read-only, prints no passwords. It shows which `.env` and `DATABASE_URL` the app
 `DATABASE_URL` environment variable is overriding `.env`), then connects the way Alembic does, the way the app
 does, and through `GET /api/health`, printing the real exception and SQLSTATE for any failing step. The server
 log also records `health_db_unavailable error=… dbapi_error=… sqlstate=…`.
+
+## Deploying the backend on Render
+
+The schema comes **only** from Alembic migrations (`backend/migrations`); the app never creates tables itself.
+A new database therefore needs `alembic upgrade head` before the API can store anything — otherwise requests fail
+with `relation "conversations" does not exist`, while a bare connection check still succeeds.
+
+Render web service (Root Directory: `backend`):
+
+| Setting | Value |
+|---|---|
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `alembic upgrade head && uvicorn app.main:create_app --factory --host 0.0.0.0 --port $PORT` |
+| Health Check Path | `/api/health` |
+
+- `alembic upgrade head` creates only what is missing and never drops data; when the schema is already current it does
+  nothing, so running it on every start is safe. If it fails, uvicorn does not start and the previous deploy keeps serving.
+  (On paid plans you may instead put `alembic upgrade head` in **Pre-Deploy Command** and keep uvicorn alone as the Start Command.)
+- `/api/health` answers 503 (`"database": "unavailable"`) when any required table is missing, and the log line
+  `health_schema_missing tables=...` names them — so a database that was never migrated cannot look healthy.
+- Environment: `DATABASE_URL` (Render's *Internal* Database URL, with the `postgresql+psycopg://` prefix),
+  `ENVIRONMENT=production`, `CORS_ORIGINS=https://<your-frontend>`, `COOKIE_SAMESITE=none`, plus the AI provider key.
+- Hospital search: `HOSPITAL_PROVIDER=snapshot` (searches the committed offline copy on the server; the public
+  Overpass server often refuses or throttles shared cloud servers) and `OSM_CONTACT=<your email or project URL>`
+  (required by the Nominatim usage policy for typed-place lookups). No API key is needed. If the log shows
+  `hospital_snapshot_missing` at startup, the copy was not deployed.
+- Read-only check of any database (prints no secrets): `python -m scripts.check_schema`.
 
 ## Known limitations (so far)
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..core.config import ENV_FILE, Settings
+from ..core.logging import logger
 from .provider import DisabledHospitalProvider, HospitalProvider
 from .suggest import DisabledSuggester, PlaceSuggester
 
@@ -40,7 +41,14 @@ def build_hospital_provider(settings: Settings) -> HospitalProvider:
     from .fallback import FallbackHospitalProvider
     from .snapshot import SnapshotHospitalProvider
 
-    snapshot = SnapshotHospitalProvider(snapshot_path(settings), geocoder=live)
+    path = snapshot_path(settings)
+    if not path.is_file():
+        # Say so once at startup (the file is loaded lazily, so otherwise every search fails over silently).
+        # Logs the configured relative setting only, not the server's directory layout.
+        logger.warning(
+            "hospital_snapshot_missing setting=%s fallback=%s", settings.hospital_snapshot_path, settings.hospital_fallback_provider
+        )
+    snapshot = SnapshotHospitalProvider(path, geocoder=live)
     if settings.hospital_fallback_provider == "none":
         return snapshot
     return FallbackHospitalProvider(snapshot, live, geocoder=live)

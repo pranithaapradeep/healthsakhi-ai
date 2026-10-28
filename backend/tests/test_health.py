@@ -118,3 +118,54 @@ def test_settings_read_backend_env_regardless_of_working_directory(tmp_path, mon
 def test_environment_variable_overrides_env_file(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost:5432/from_env_var")
     assert Settings().database_url.endswith("/from_env_var")  # type: ignore[call-arg]
+
+
+VERCEL = "https://healthsakhi-ai.vercel.app"
+
+
+def _deployed_app(settings, engine):
+    # The production frontend origin, as set in Render's CORS_ORIGINS (plus local development).
+    return create_app(settings.model_copy(update={"cors_origins": f"{VERCEL}, http://localhost:5173"}), engine)
+
+
+def test_cors_allows_the_deployed_frontend_with_credentials(settings, engine):
+    app = _deployed_app(settings, engine)
+    with TestClient(app) as c:
+        pre = c.options(
+            "/api/v1/chat",
+            headers={"Origin": VERCEL, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type,x-hs-client"},
+        )
+        assert pre.status_code == 200
+        assert pre.headers["access-control-allow-origin"] == VERCEL  # exact origin, never "*"
+        assert pre.headers["access-control-allow-credentials"] == "true"
+        allowed = pre.headers["access-control-allow-headers"].lower()
+        assert "x-hs-client" in allowed and "content-type" in allowed
+        assert "POST" in pre.headers["access-control-allow-methods"]
+
+        me = c.get("/api/v1/auth/me", headers={"Origin": VERCEL})  # 401 for a guest, but readable by the page
+        assert me.headers["access-control-allow-origin"] == VERCEL
+        assert me.headers["access-control-allow-credentials"] == "true"
+
+        other = c.options("/api/v1/chat", headers={"Origin": "https://healthsakhi-ai-evil.vercel.app", "Access-Control-Request-Method": "POST"})
+        assert "access-control-allow-origin" not in other.headers
+
+
+def test_csrf_rejection_and_server_errors_still_carry_cors_headers(settings, engine):
+    app = _deployed_app(settings, engine)
+
+    @app.get("/api/v1/_boom")
+    def _boom() -> None:
+        raise RuntimeError("internal secret detail")
+
+    with TestClient(app, raise_server_exceptions=False) as c:
+        forbidden = c.post("/api/v1/safety/check", json={"text": "hi", "language": "en"}, headers={"Origin": VERCEL})  # no X-HS-Client
+        assert forbidden.status_code == 403
+        assert forbidden.headers["access-control-allow-origin"] == VERCEL
+
+        boom = c.get("/api/v1/_boom", headers={"Origin": VERCEL, "X-HS-Client": "web"})
+        assert boom.status_code == 500
+        assert boom.json() == {"detail": "internal_error"}
+        assert "secret" not in boom.text
+        assert boom.headers["access-control-allow-origin"] == VERCEL
+        assert boom.headers["x-content-type-options"] == "nosniff"  # security headers still applied
+

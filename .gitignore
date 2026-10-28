@@ -23,6 +23,8 @@ htmlcov/
 
 # Offline OpenStreetMap hospital copy (rebuild with scripts/build_hospital_snapshot.py)
 backend/data/*.json.gz
+# ...except the finished India copy, which the deployed server needs (OSM data, ODbL; attributed in the app)
+!backend/data/hospitals-india.json.gz
 backend/data/*.partial.json
 backend/data/*.tmp
 

@@ -1,9 +1,11 @@
-"""Pure-ASGI middleware: request-size limit, CSRF client header, security headers."""
+"""Pure-ASGI middleware: request-size limit, CSRF client header, security headers, unhandled errors."""
 from __future__ import annotations
 
 import json
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from .logging import logger
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 CLIENT_HEADER = b"x-hs-client"
@@ -120,3 +122,36 @@ class SecurityHeadersMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
+
+
+class UnhandledErrorMiddleware:
+    """Turn unexpected exceptions into the generic 500 *inside* the CORS layer.
+
+    FastAPI's catch-all exception handler runs in Starlette's outermost error middleware, outside CORSMiddleware,
+    so its 500 responses carry no Access-Control-Allow-Origin header and the browser reports a misleading CORS
+    error instead of the server error. Registered just inside CORS, this returns the same generic body
+    (nothing from the exception is sent or logged beyond its type and the path).
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        started = False
+
+        async def tracking_send(message: Message) -> None:
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, tracking_send)
+        except Exception as exc:  # noqa: BLE001 — last line of defence; logged without details
+            logger.error("unhandled_error type=%s path=%s", type(exc).__name__, scope.get("path", ""))
+            if started:
+                raise  # part of a response was already sent; nothing safe can be added now
+            await _json_response(send, 500, "internal_error")

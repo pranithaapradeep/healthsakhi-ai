@@ -14,7 +14,12 @@ from .api.router import api_root, api_v1
 from .core.config import Settings, get_settings
 from .core.errors import register_error_handlers
 from .core.logging import configure_logging
-from .core.middleware import BodySizeLimitMiddleware, ClientHeaderMiddleware, SecurityHeadersMiddleware
+from .core.middleware import (
+    BodySizeLimitMiddleware,
+    ClientHeaderMiddleware,
+    SecurityHeadersMiddleware,
+    UnhandledErrorMiddleware,
+)
 from .core.ratelimit import RateLimiter
 from .hospitals.factory import build_hospital_provider, build_place_suggester
 from .hospitals.provider import HospitalProvider
@@ -55,9 +60,12 @@ def create_app(
     app.include_router(api_v1)
 
     # Starlette runs the last-added middleware first. Order (outer → inner):
-    # CORS → security headers → size limit → client header (CSRF) → app
+    # CORS → security headers → unhandled errors → size limit → client header (CSRF) → app
+    # Every response, including 403/413 from these middlewares and 500s, passes back through CORS, so the
+    # browser sees the real status instead of a CORS error.
     app.add_middleware(ClientHeaderMiddleware)
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_bytes)
+    app.add_middleware(UnhandledErrorMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
         CORSMiddleware,

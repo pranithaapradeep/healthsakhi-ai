@@ -194,6 +194,31 @@ def test_relative_snapshot_path_is_inside_the_backend_folder(settings):
     assert p.parts[-3:] == ("backend", "data", "hospitals-india.json.gz") or p.parts[-2:] == ("data", "hospitals-india.json.gz")
 
 
+def test_missing_copy_is_reported_once_at_startup(settings, tmp_path, caplog):
+    # On a server the copy was not deployed to, every search would otherwise fail over to live Overpass silently.
+    missing = settings.model_copy(update={"hospital_provider": "snapshot", "hospital_snapshot_path": str(tmp_path / "absent.json.gz")})
+    with caplog.at_level(logging.WARNING, logger="healthsakhi"):
+        build_hospital_provider(missing)
+    assert "hospital_snapshot_missing" in caplog.text and "fallback=osm" in caplog.text
+
+    caplog.clear()
+    present = missing.model_copy(update={"hospital_snapshot_path": str(write(tmp_path / "present.json.gz"))})
+    with caplog.at_level(logging.WARNING, logger="healthsakhi"):
+        build_hospital_provider(present)
+        build_hospital_provider(settings.model_copy(update={"hospital_provider": "osm"}))  # live only: no copy expected
+    assert "hospital_snapshot_missing" not in caplog.text
+
+
+def test_deployed_india_copy_answers_when_present(settings):
+    """The copy that ships with the backend (backend/data/hospitals-india.json.gz) must load and find real hospitals."""
+    path = snapshot_path(settings.model_copy(update={"hospital_snapshot_path": "data/hospitals-india.json.gz"}))
+    if not path.is_file():
+        pytest.skip("offline India copy not present in this checkout")
+    facilities, source = SnapshotHospitalProvider(path).search_with_source(LAT, LON, 10_000, False, "en")  # central Chennai
+    assert len(facilities) > 0
+    assert source.data_as_of and source.license == "ODbL 1.0"
+
+
 def test_default_provider_is_still_live_osm():
     from app.core.config import Settings
 
